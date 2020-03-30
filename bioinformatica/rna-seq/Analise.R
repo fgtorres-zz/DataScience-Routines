@@ -1,51 +1,8 @@
 
-#-------------------------------------------------------------------------------------------------
-# Instalando dependencias desse script
-#-------------------------------------------------------------------------------------------------
-
-# if (!requireNamespace("BiocManager", quietly = TRUE))
-  # install.packages("BiocManager")
-# BiocManager::install(version = "3.10")
-
-# BiocManager::install("edgeR", update = TRUE)
-# BiocManager::install("limma")
-# BiocManager::install("tximport")
-# BiocManager::install("tximportData")
-# BiocManager::install("gplots")
-# BiocManager::install("DeSeq2")
-# BiocManager::install("SummarizedExperiment")
-# BiocManager::install("XML")
-
-library(BiocInstaller)
-biocValid()
-
-if (!requireNamespace("BiocManager", quietly = TRUE))
-  install.packages("BiocManager")
-BiocManager::install("DESeq2")
-
-#-------------------------------------------------------------------------------------------------
-# Carregando bibliotecas
-#-------------------------------------------------------------------------------------------------
-
-library(matrixStats)
-library(gplots)
-library(edgeR)
-library(limma)
-library("tximport")
-library("tximportData")
-library(RColorBrewer)
-library(DESeq2)
-library(DESeq)
-
-options(digits=3)
-rm(list=ls())
-
-setwd("/home/fgtorres/analises/carol-leish-baco/")
-
 # Import data from featureCounts
 ## Previously ran at command line something like this:
 ## featureCounts -a genes.gtf -o counts.txt -T 12 -t exon -g gene_id GSM*.sam
-countdata <- read.delim2("counts-geral-tid.txt", header=TRUE, row.names=1)
+countdata <- read.table("C:\\Users\\Felipe Torres\\Desktop\\counts.txt", header=TRUE, row.names=1)
 
 # Remove first five columns (chr, start, end, strand, length)
 countdata <- countdata[ ,6:ncol(countdata)]
@@ -58,22 +15,21 @@ countdata <- as.matrix(countdata)
 head(countdata)
 
 # Assign condition (first four are controls, second four contain the expansion)
-(condition <- factor(c(rep("ctl", 12), rep("exp", 12))))
+(condition <- factor(c(rep("ctl", 3), rep("exp", 3))))
 
+# Analysis with DESeq2 ----------------------------------------------------
+library(DESeq2)
 
 # Create a coldata frame and instantiate the DESeqDataSet. See ?DESeqDataSetFromMatrix
 (coldata <- data.frame(row.names=colnames(countdata), condition))
-dds <- DESeq2::DESeqDataSetFromMatrix(countData=countdata, colData=coldata, design=~condition)
-dds <- DESeq2::estimateSizeFactors(dds)
+dds <- DESeqDataSetFromMatrix(countData=countdata, colData=coldata, design=~condition)
+dds
 
-counts(dds, normalized=TRUE)
-idx <- rowSums( counts(dds, normalized=TRUE) >= 5 ) >= 3
-dds <- dds[idx,]
 # Run the DESeq pipeline
 dds <- DESeq(dds)
 
 # Plot dispersions
-png("qc-dispersions.png", 1000, 1000, pointsize=20)
+png("C:\\Users\\Felipe Torres\\Desktop\\qc-dispersions.png", 1000, 1000, pointsize=20)
 plotDispEsts(dds, main="Dispersion plot")
 dev.off()
 
@@ -121,7 +77,7 @@ rld_pca <- function (rld, intgroup = "condition", ntop = 500, colors=NULL, legen
   pc1var <- round(summary(pca)$importance[2,1]*100, digits=1)
   pc2var <- round(summary(pca)$importance[2,2]*100, digits=1)
   pc1lab <- paste0("PC1 (",as.character(pc1var),"%)")
-  pc2lab <- paste0("PC2 (",as.character(pc2var),"%)")
+  pc2lab <- paste0("PC1 (",as.character(pc2var),"%)")
   plot(PC2~PC1, data=as.data.frame(pca$x), bg=colors[fac], pch=21, xlab=pc1lab, ylab=pc2lab, main=main, ...)
   with(as.data.frame(pca$x), textxy(PC1, PC2, labs=rownames(as.data.frame(pca$x)), cex=textcx))
   legend(legendpos, legend=levels(fac), col=colors, pch=20)
@@ -144,7 +100,7 @@ resdata <- merge(as.data.frame(res), as.data.frame(counts(dds, normalized=TRUE))
 names(resdata)[1] <- "Gene"
 head(resdata)
 ## Write results
-write.csv(resdata, file="diffexpr-results.csv")
+write.csv(resdata, file="C:\\Users\\Felipe Torres\\Desktop\\diffexpr-results.csv")
 
 ## Examine plot of p-values
 hist(res$pvalue, breaks=50, col="grey")
@@ -157,45 +113,32 @@ plot(attr(res,"filterNumRej"), type="b", xlab="quantiles of baseMean", ylab="num
 ## Could do with built-in DESeq2 function:
 ## DESeq2::plotMA(dds, ylim=c(-1,1), cex=1)
 ## I like mine better:
-maplot <- function (res, thresh=0.05, labelsig=FALSE, textcx=1, ...) {
+maplot <- function (res, thresh=0.05, labelsig=TRUE, textcx=1, ...) {
   with(res, plot(baseMean, log2FoldChange, pch=20, cex=.5, log="x", ...))
- # with(subset(res, padj<thresh), points(baseMean, log2FoldChange, col="red", pch=20, cex=1.5))
+  with(subset(res, padj<thresh), points(baseMean, log2FoldChange, col="red", pch=20, cex=1.5))
   if (labelsig) {
     require(calibrate)
     with(subset(res, padj<thresh), textxy(baseMean, log2FoldChange, labs=Gene, cex=textcx, col=2))
   }
 }
-png("diffexpr-maplot.png", 1500, 1000, pointsize=20)
+png("C:\\Users\\Felipe Torres\\Desktop\\diffexpr-maplot.png", 1500, 1000, pointsize=20)
 maplot(resdata, main="MA Plot")
 dev.off()
 
 ## Volcano plot with "significant" genes labeled
-volcanoplot <- function (resdata, lfcthresh=2, sigthresh=0.05, main="Volcano Plot", legendpos="bottomright", 
-                         labelsig=FALSE, textcx=1, ...) {
+volcanoplot <- function (resdata, lfcthresh=2, sigthresh=0.05, main="Volcano Plot", legendpos="bottomright", labelsig=TRUE, textcx=1, ...) {
   with(res, plot(log2FoldChange, -log10(pvalue), pch=20, main=main, ...))
   with(subset(res, padj<sigthresh ), points(log2FoldChange, -log10(pvalue), pch=20, col="red", ...))
   with(subset(res, abs(log2FoldChange)>lfcthresh), points(log2FoldChange, -log10(pvalue), pch=20, col="orange", ...))
   with(subset(res, padj<sigthresh & abs(log2FoldChange)>lfcthresh), points(log2FoldChange, -log10(pvalue), pch=20, col="green", ...))
   if (labelsig) {
     require(calibrate)
-    with(subset(res, padj<sigthresh & abs(log2FoldChange)>lfcthresh), textxy(log2FoldChange, -log10(pvalue), labs=resdata$Gene, cex=textcx, ...))
+    with(subset(res, padj<sigthresh & abs(log2FoldChange)>lfcthresh), textxy(log2FoldChange, -log10(pvalue), labs=Gene, cex=textcx, ...))
   }
   legend(legendpos, xjust=1, yjust=1, legend=c(paste("FDR<",sigthresh,sep=""), paste("|LogFC|>",lfcthresh,sep=""), "both"), pch=20, col=c("red","orange","green"))
 }
-png("diffexpr-volcanoplot.png", 1200, 1000, pointsize=20)
-volcanoplot(resdata, lfcthresh=1, sigthresh=0.05, textcx=.8, xlim=c(-2.3, 2), ylim=c(0, 6) )
+png("C:\\Users\\Felipe Torres\\Desktop\\diffexpr-volcanoplot.png", 1200, 1000, pointsize=20)
+volcanoplot(resdata, lfcthresh=1, sigthresh=0.05, textcx=.8, xlim=c(-2.3, 2))
 dev.off()
 
-write.csv(resdata, file = "Tabelafinal.csv")
-
-# PCA Plot
-se <- SummarizedExperiment(log2(counts(dds, normalized=TRUE) + 1),
-                           colData=colData(dds))
-# the call to DESeqTransform() is needed to
-# trigger our plotPCA method.
-
-p <- DESeq2::plotPCA( DESeq2::DESeqTransform( se ) )
-p <- p + ggplot2::geom_text(ggplot2::aes_string(x = "PC1", y = "PC2", label = p$data$name),
-                            color = "black")
-#p <- p + ggplot2::geom_point(ggplot2::aes(colour = factor(p$data$name)))
-print(p)
+write.csv(resdata, file = "C:\\Users\\Felipe Torres\\Desktop\\Tabelafinal.csv")
